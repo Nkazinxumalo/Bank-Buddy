@@ -14,7 +14,8 @@ from app.models import (User, UserDocument, SavingsGoal, Budget,
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, current_user, logout_user, login_required
 
-from azure.identity import DefaultAzureCredential, ManagedIdentityCredential, get_bearer_token_provider
+from azure.identity import (DefaultAzureCredential, ManagedIdentityCredential,
+                            get_bearer_token_provider)
 from openai import OpenAI
 
 main_bp = Blueprint('main', __name__)
@@ -47,6 +48,7 @@ def allowed_file(filename):
 
 
 def extract_file_text(filepath, max_chars=8000):
+    """Return a plain-text representation of the uploaded file."""
     try:
         if not os.path.exists(filepath):
             return ""
@@ -86,9 +88,25 @@ def extract_file_text(filepath, max_chars=8000):
         return ""
 
 
+# ============================================
+# CREDENTIALS — works on Azure, Render, and local
+# ============================================
 def get_azure_credential():
+    """
+    Choose the right credential for the current environment:
+    - Azure App Service  → system-assigned Managed Identity
+    - Render (or other)  → user-assigned Managed Identity via AZURE_CLIENT_ID
+    - Local              → DefaultAzureCredential (uses `az login`)
+    """
     if os.environ.get('WEBSITE_SITE_NAME'):
+        print("Auth: Azure App Service — ManagedIdentityCredential (system-assigned)")
         return ManagedIdentityCredential()
+
+    if os.environ.get('AZURE_CLIENT_ID'):
+        print(f"Auth: Render/user-assigned — ManagedIdentityCredential(client_id={os.environ['AZURE_CLIENT_ID'][:8]}...)")
+        return ManagedIdentityCredential(client_id=os.environ.get('AZURE_CLIENT_ID'))
+
+    print("Auth: Local — DefaultAzureCredential (az login)")
     return DefaultAzureCredential()
 
 
@@ -106,6 +124,7 @@ def get_azure_client():
 
 
 def call_bank_buddy(message, conversation_id=None):
+    """Send a message to Bank Buddy, returns (response_text, conversation_id)."""
     client = get_azure_client()
     if not conversation_id:
         conversation = client.conversations.create()
@@ -118,7 +137,6 @@ def call_bank_buddy(message, conversation_id=None):
 # CONTEXT BLOCK — gives the agent awareness of the dashboard
 # ============================================
 def build_user_context():
-    """Summarise the user's dashboard state for the agent's prompt."""
     uid = current_user.id
     goals = SavingsGoal.query.filter_by(user_id=uid).all()
     budgets = Budget.query.filter_by(user_id=uid).all()
@@ -167,6 +185,15 @@ def build_user_context():
     return "\n".join(parts)
 
 
+def ask_bank_buddy_with_context(user_message):
+    context = build_user_context()
+    full_prompt = f"{context}\n\nUser message: {user_message}"
+    conv_id = session.get('conversation_id')
+    response_text, conv_id = call_bank_buddy(full_prompt, conv_id)
+    session['conversation_id'] = conv_id
+    return response_text
+
+
 # ============================================
 # AUTH
 # ============================================
@@ -174,7 +201,6 @@ def build_user_context():
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('main.home'))
-
     form = RegistrationForm()
     if form.validate_on_submit():
         if User.query.filter_by(email=form.email.data).first():
@@ -247,7 +273,6 @@ def agent_dashboard():
     summary = StatementSummary.query.filter_by(user_id=current_user.id).first()
     debits = DebitOrder.query.filter_by(user_id=current_user.id).order_by(DebitOrder.next_due.asc()).all()
 
-    # Compute days until each debit order is due
     today = date.today()
     debit_rows = []
     for d in debits:
@@ -285,16 +310,6 @@ def agent_chat():
         form=form,
         conversation_history=session.get('conversation_history', [])
     )
-
-
-def ask_bank_buddy_with_context(user_message):
-    """Send a message with the user's dashboard context prefixed."""
-    context = build_user_context()
-    full_prompt = f"{context}\n\nUser message: {user_message}"
-    conv_id = session.get('conversation_id')
-    response_text, conv_id = call_bank_buddy(full_prompt, conv_id)
-    session['conversation_id'] = conv_id
-    return response_text
 
 
 @agent_bp.route("/agent/send", methods=['POST'])
@@ -411,15 +426,12 @@ def agent_upload():
 
 
 def parse_agent_json(text):
-    """Pull a JSON object out of a possibly-wrapped response."""
-    # Try fenced code block first
     m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if m:
         try:
             return json.loads(m.group(1))
         except Exception:
             pass
-    # Try first { ... } block
     m = re.search(r"(\{.*\})", text, re.DOTALL)
     if m:
         try:
@@ -432,7 +444,6 @@ def parse_agent_json(text):
 @agent_bp.route("/agent/analyse-latest", methods=['POST'])
 @login_required
 def agent_analyse_latest():
-    """Analyse the latest statement, extract numbers, save to dashboard."""
     try:
         doc = (UserDocument.query
                .filter_by(user_id=current_user.id)
@@ -452,7 +463,7 @@ def agent_analyse_latest():
                              "Please paste a few key lines so I can still help you analyse it.")
             })
 
-        # ---- Step 1: Ask the agent for structured data ----
+        # Step 1: Extract structured data
         extract_prompt = (
             "You are extracting structured data from a South African bank statement.\n"
             "Return ONLY valid JSON — no other text — in this exact shape:\n"
@@ -466,13 +477,11 @@ def agent_analyse_latest():
             "Rules:\n"
             "- All amounts in ZAR (positive numbers).\n"
             "- top_categories: at most 5, biggest first.\n"
-            "- debit_orders: only recurring monthly payments you can identify by name "
-            "(e.g. Netflix, Discovery, Vodacom, Spotify, DSTV, insurance).\n"
+            "- debit_orders: only recurring monthly payments you can identify by name.\n"
             "- If you cannot tell a value, use 0 (or [] for lists).\n\n"
             "STATEMENT TEXT:\n"
             f"{file_text}"
         )
-
         raw_json, _ = call_bank_buddy(extract_prompt, None)
         extracted = parse_agent_json(raw_json) or {}
 
@@ -482,7 +491,7 @@ def agent_analyse_latest():
         top_categories = extracted.get('top_categories') or []
         debit_orders = extracted.get('debit_orders') or []
 
-        # ---- Step 2: Save summary ----
+        # Step 2: Save summary
         summary = StatementSummary.query.filter_by(user_id=current_user.id).first()
         if not summary:
             summary = StatementSummary(user_id=current_user.id)
@@ -493,7 +502,7 @@ def agent_analyse_latest():
         summary.top_categories_json = json.dumps(top_categories)
         summary.updated_at = datetime.utcnow()
 
-        # ---- Step 3: Upsert detected debit orders ----
+        # Step 3: Upsert debit orders
         today = date.today()
         for d in debit_orders:
             name = (d.get('name') or '').strip()
@@ -503,7 +512,6 @@ def agent_analyse_latest():
             dom = d.get('day_of_month') or None
 
             existing = DebitOrder.query.filter_by(user_id=current_user.id, name=name).first()
-            # Compute the next due date
             if dom:
                 dom = int(dom)
                 if dom < today.day:
@@ -512,7 +520,6 @@ def agent_analyse_latest():
                 else:
                     next_due = date(today.year, today.month, min(dom, 28))
             else:
-                # Unknown day — assume in ~30 days
                 next_due = today + timedelta(days=30)
 
             if existing:
@@ -528,7 +535,7 @@ def agent_analyse_latest():
 
         db.session.commit()
 
-        # ---- Step 4: Get a friendly narrative from the agent ----
+        # Step 4: Narrative response
         narrative_prompt = (
             "The user just uploaded a bank statement and I've extracted this summary:\n"
             f"- Total spent: R{total_spent:.2f}\n"
@@ -582,9 +589,6 @@ def delete_document(doc_id):
     return jsonify({"status": "deleted", "id": doc_id})
 
 
-# ============================================
-# DEBIT ORDER DISMISSAL
-# ============================================
 @agent_bp.route("/debit-orders/<int:debit_id>/dismiss", methods=['POST'])
 @login_required
 def dismiss_debit(debit_id):
@@ -672,6 +676,21 @@ def chat_test():
         return {"status": "ok", "response": text}
     except Exception as e:
         return {"status": "error", "type": type(e).__name__, "message": str(e)}, 500
+
+
+@main_bp.route("/auth-debug")
+def auth_debug():
+    """Diagnostic endpoint — reports which credential path is being used."""
+    return {
+        "environment": {
+            "WEBSITE_SITE_NAME": os.environ.get('WEBSITE_SITE_NAME'),
+            "AZURE_CLIENT_ID": bool(os.environ.get('AZURE_CLIENT_ID')),
+            "AZURE_TENANT_ID": bool(os.environ.get('AZURE_TENANT_ID')),
+            "AZURE_PROJECT_ENDPOINT_set": bool(os.environ.get('AZURE_PROJECT_ENDPOINT')),
+            "AZURE_AGENT_NAME": AZURE_AGENT_NAME,
+        },
+        "credential_chosen": type(get_azure_credential()).__name__,
+    }
 
 
 @main_bp.route("/health")
