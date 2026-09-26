@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .greeting { font-size: 1.8rem; font-weight: 800; color: #3d2955; margin: 0 0 25px 0; }
+  .actions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 30px; }
+  .action-tab { border: none; border-radius: 14px; padding: 22px 18px; text-align: left; cursor: pointer; font-family: inherit; transition: transform .15s, box-shadow .15s; }
+  .action-tab:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.1); }
+  .action-icon { font-size: 1.8rem; display: block; margin-bottom: 8px; }
+  .action-title { font-weight: 800; color: #3d2955; font-size: 1rem; display: block; margin-bottom: 4px; }
+  .action-sub { font-size: .82rem; color: #555; }
+  .action-budget { background: #E6E6FA; } .action-expenses { background: #FCE5E3; }
+  .action-savings { background: #D8F3EE; } .action-learn { background: #DDEFD9; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 18px; margin-bottom: 30px; }
+  .stat-box { background: white; border-radius: 16px; padding: 24px 18px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,.05); border-top: 4px solid #d8a9c8; }
+  .stat-box:nth-child(2) { border-top-color: #4db6ac; }
+  .stat-box:nth-child(3) { border-top-color: #f9c22e; }
+  .stat-box:nth-child(4) { border-top-color: #6b47a1; }
+  .stat-label { text-transform: uppercase; letter-spacing: 1px; font-size: .75rem; color: #888; font-weight: 700; margin-bottom: 8px; }
+  .stat-value { font-size: 2rem; font-weight: 800; color: #6b47a1; margin-bottom: 4px; }
+  .stat-box:nth-child(2) .stat-value { color: #3d8d84; }
+  .stat-sub { font-size: .8rem; color: #999; }
+
+  .section-box { background: white; border-radius: 18px; padding: 28px 32px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,.05); }
+  .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .section-head h3 { font-size: 1.2rem; font-weight: 800; color: #3d2955; margin: 0; }
+  .btn-teal { background: #4db6ac; color: white; padding: 9px 18px; border-radius: 8px; border: none; font-weight: 700; font-size: .9rem; cursor: pointer; }
+  .btn-teal:hover { background: #3d8d84; }
+  .empty-state { text-align: center; padding: 40px 20px; color: #999; }
+  .empty-state .empty-icon { font-size: 3rem; display: block; margin-bottom: 12px; }
+  .empty-state p { margin: 0; font-size: .95rem; }
+
+  .upload-area { border: 2px dashed #d8a9c8; border-radius: 12px; padding: 24px; background: #faf5fc; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .upload-area input[type="file"] { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; background: white; font-size: .95rem; }
+
+  .chat-callout { background: linear-gradient(135deg, #fdf2f8, #f3e8fa); border-left: 6px solid #6b47a1; border-radius: 18px; padding: 32px; text-align: center; margin-bottom: 24px; }
+  .chat-callout h3 { font-size: 1.3rem; font-weight: 800; color: #3d2955; margin: 0 0 8px 0; }
+  .btn-purple { background: #6b47a1; color: white; padding: 14px 32px; border-radius: 10px; font-weight: 700; font-size: 1rem; border: none; cursor: pointer; text-decoration: none; display: inline-block; }
+  .btn-purple:hover { background: #553a80; }
+
+  .doc-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid #f0f0f0; }
+  .doc-item:last-child { border-bottom: none; }
+  .doc-info strong { color: #3d2955; font-size: 1rem; }
+  .doc-info span { color: #999; font-size: .85rem; margin-left: 10px; }
+  .doc-delete { background: #f8d7da; color: #721c24; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .85rem; font-weight: 600; }
+
+  /* Debit order row */
+  .debit-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-radius: 12px; margin-bottom: 10px; background: #f9fafb; border-left: 5px solid #ddd; }
+  .debit-row.due-soon { background: #fff5e5; border-left-color: #f0a500; }
+  .debit-row.overdue { background: #fdecec; border-left-color: #d64545; }
+  .debit-name { font-weight: 700; color: #3d2955; }
+  .debit-meta { font-size: .85rem; color: #666; }
+  .debit-amount { font-weight: 800; color: #6b47a1; font-size: 1.05rem; }
+  .debit-badge { display: inline-block; background: #f0a500; color: white; padding: 2px 8px; border-radius: 10px; font-size: .7rem; font-weight: 700; margin-left: 8px; }
+
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); justify-content: center; align-items: center; z-index: 1000; }
+  .modal-backdrop.active { display: flex; }
+  .modal { background: white; border-radius: 16px; padding: 28px; width: 420px; max-width: 90%; box-shadow: 0 20px 40px rgba(0,0,0,.2); }
+  .modal h3 { margin: 0 0 18px 0; color: #3d2955; font-size: 1.2rem; }
+  .modal label { display: block; margin-bottom: 6px; font-size: .9rem; font-weight: 600; color: #3d2955; }
+  .modal input, .modal select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 14px; box-sizing: border-box; }
+  .modal-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+  .btn-cancel { background: #eee; color: #333; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
+
+  #tab-result { display: none; background: #faf5fc; border-left: 6px solid #6b47a1; border-radius: 14px; padding: 22px 26px; margin-bottom: 24px; color: #3d2955; line-height: 1.6; white-space: pre-wrap; }
+  #tab-result .result-header { display: flex; justify-content: space-between; align-items: center; font-weight: 800; margin-bottom: 12px; color: #6b47a1; }
+  #tab-result .close-btn { background: transparent; border: none; cursor: pointer; color: #999; font-size: 1.2rem; }
+</style>
+
+<h2 class="greeting">Hi {{ current_user.username }} 👋</h2>
+
+<!-- ACTION TABS -->
+<div class="actions-grid">
+  <button class="action-tab action-budget" data-preset="budget">
+    <span class="action-icon">💰</span><span class="action-title">Create Budget</span>
+    <span class="action-sub">Personalized monthly plan</span>
+  </button>
+  <button class="action-tab action-expenses" data-preset="expenses">
+    <span class="action-icon">📊</span><span class="action-title">Track Expenses</span>
+    <span class="action-sub">See where your money goes</span>
+  </button>
+  <button class="action-tab action-savings" data-preset="savings">
+    <span class="action-icon">🎯</span><span class="action-title">Set Savings Goal</span>
+    <span class="action-sub">Plan and stay motivated</span>
+  </button>
+  <button class="action-tab action-learn" data-preset="learn">
+    <span class="action-icon">📚</span><span class="action-title">Learn Finances</span>
+    <span class="action-sub">Simple money lessons</span>
+  </button>
+</div>
+
+<div id="tab-result">
+  <div class="result-header">
+    <span id="tab-result-title">Bank Buddy</span>
+    <button class="close-btn" onclick="hideTabResult()">✕</button>
+  </div>
+  <div id="tab-result-text">Loading...</div>
+</div>
+
+<!-- STATS — now wired to real data -->
+<div class="stats-grid">
+  <div class="stat-box">
+    <div class="stat-label">Statements</div>
+    <div class="stat-value" id="stat-count">{{ documents|length }}</div>
+    <div class="stat-sub">uploaded so far</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Total Spent</div>
+    <div class="stat-value">R{{ '%.2f'|format(summary.total_spent) if summary else '0.00' }}</div>
+    <div class="stat-sub">across all statements</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Total Received</div>
+    <div class="stat-value">R{{ '%.2f'|format(summary.total_received) if summary else '0.00' }}</div>
+    <div class="stat-sub">income detected</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Balance</div>
+    <div class="stat-value">R{{ '%.2f'|format(summary.balance) if summary else '0.00' }}</div>
+    <div class="stat-sub">income minus spending</div>
+  </div>
+</div>
+
+<!-- DEBIT ORDER REMINDERS -->
+{% if debit_rows %}
+<div class="section-box">
+  <div class="section-head"><h3>🔔 Upcoming payments</h3></div>
+  {% for d in debit_rows %}
+    <div class="debit-row {% if d.days_until is not none and d.days_until < 0 %}overdue{% elif d.due_soon %}due-soon{% endif %}">
+      <div>
+        <div class="debit-name">
+          {{ d.name }}
+          {% if d.due_soon %}<span class="debit-badge">due soon</span>{% endif %}
+        </div>
+        <div class="debit-meta">
+          {% if d.next_due %}
+            Next: {{ d.next_due.strftime('%d %b %Y') }}
+            {% if d.days_until is not none %}
+              — {% if d.days_until < 0 %}overdue by {{ -d.days_until }} day{{ 's' if d.days_until|abs != 1 }}
+              {% elif d.days_until == 0 %}due today
+              {% else %}in {{ d.days_until }} day{{ 's' if d.days_until != 1 }}
+              {% endif %}
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+      <div style="text-align: right;">
+        <div class="debit-amount">R{{ '%.2f'|format(d.amount) }}</div>
+        <button class="doc-delete debit-dismiss" data-id="{{ d.id }}" style="margin-top: 6px;">Dismiss</button>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Savings Goals -->
+<div class="section-box">
+  <div class="section-head">
+    <h3>🎯 Savings Goals</h3>
+    <button class="btn-teal" id="add-goal-btn">+ Add Goal</button>
+  </div>
+  <div id="goals-list">
+    {% if goals %}
+      {% for g in goals %}
+        <div class="doc-item" id="goal-{{ g.id }}">
+          <div class="doc-info">
+            <strong>{{ g.name }}</strong>
+            <span>Target: R{{ '%.2f'|format(g.target_amount) }}{% if g.target_date %} • by {{ g.target_date }}{% endif %}</span>
+          </div>
+          <button class="doc-delete goal-delete" data-id="{{ g.id }}">Delete</button>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state"><span class="empty-icon">🎯</span><p>No goals yet. Click "+ Add Goal" to start saving!</p></div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Budgets -->
+<div class="section-box">
+  <div class="section-head">
+    <h3>💼 Monthly Budgets</h3>
+    <button class="btn-teal" id="add-budget-btn">+ Add Budget</button>
+  </div>
+  <div id="budgets-list">
+    {% if budgets %}
+      {% for b in budgets %}
+        <div class="doc-item" id="budget-{{ b.id }}">
+          <div class="doc-info">
+            <strong>{{ b.category }}</strong>
+            <span>R{{ '%.2f'|format(b.monthly_limit) }} / month</span>
+          </div>
+          <button class="doc-delete budget-delete" data-id="{{ b.id }}">Delete</button>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state"><span class="empty-icon">💼</span><p>No budgets yet. Click "+ Add Budget" to set one.</p></div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Upload -->
+<div class="section-box">
+  <div class="section-head"><h3>📎 Upload a bank statement</h3></div>
+  <p style="color: #888; margin: 0 0 16px 0; font-size: .9rem;">PDF, CSV or Excel — Bank Buddy will read it, update your dashboard, and flag recurring payments.</p>
+  <form id="upload-form" enctype="multipart/form-data">
+    <div class="upload-area">
+      <input type="file" id="statement-file" name="document" accept=".pdf,.csv,.xlsx,.xls,.txt">
+      <button type="submit" class="btn-teal">Upload &amp; Analyse</button>
+    </div>
+  </form>
+</div>
+
+<!-- Statements -->
+<div class="section-box">
+  <div class="section-head"><h3>📁 Your statements</h3></div>
+  <div id="statements-list">
+    {% if documents %}
+      {% for doc in documents %}
+        <div class="doc-item" id="doc-{{ doc.id }}">
+          <div class="doc-info">
+            <strong>{{ doc.filename }}</strong>
+            <span>{{ doc.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</span>
+          </div>
+          <button class="doc-delete doc-delete-btn" data-id="{{ doc.id }}">Delete</button>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state"><span class="empty-icon">📁</span><p>No statements uploaded yet.</p></div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Chat callout -->
+<div class="chat-callout">
+  <h3>💬 Ready to chat?</h3>
+  <p>Bank Buddy already knows your goals, budgets, and spending — just ask.</p>
+  <a href="{{ url_for('agent.agent_chat') }}" class="btn-purple">Chat with Bank Buddy</a>
+</div>
+
+<!-- Modals -->
+<div class="modal-backdrop" id="goal-modal">
+  <div class="modal">
+    <h3>Add Savings Goal</h3>
+    <label>Goal name</label><input type="text" id="goal-name" placeholder="e.g. Emergency fund">
+    <label>Target amount (R)</label><input type="number" id="goal-amount" placeholder="10000">
+    <label>Target date (optional)</label><input type="date" id="goal-date">
+    <div class="modal-buttons">
+      <button class="btn-cancel" onclick="closeModal('goal-modal')">Cancel</button>
+      <button class="btn-teal" id="save-goal-btn">Save Goal</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="budget-modal">
+  <div class="modal">
+    <h3>Add Monthly Budget</h3>
+    <label>Category</label>
+    <select id="budget-category">
+      <option>Groceries</option><option>Transport</option><option>Entertainment</option>
+      <option>Rent</option><option>Utilities</option><option>Other</option>
+    </select>
+    <label>Monthly limit (R)</label><input type="number" id="budget-amount" placeholder="2000">
+    <div class="modal-buttons">
+      <button class="btn-cancel" onclick="closeModal('budget-modal')">Cancel</button>
+      <button class="btn-teal" id="save-budget-btn">Save Budget</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal(id){document.getElementById(id).classList.add('active');}
+  function closeModal(id){document.getElementById(id).classList.remove('active');}
+  document.getElementById('add-goal-btn').onclick = () => openModal('goal-modal');
+  document.getElementById('add-budget-btn').onclick = () => openModal('budget-modal');
+  document.querySelectorAll('.modal-backdrop').forEach(m=>{
+    m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active');});
+  });
+
+  function showTabResult(title, text){
+    document.getElementById('tab-result-title').textContent = title;
+    document.getElementById('tab-result-text').textContent = text;
+    document.getElementById('tab-result').style.display = 'block';
+    document.getElementById('tab-result').scrollIntoView({behavior:'smooth'});
+  }
+  function hideTabResult(){document.getElementById('tab-result').style.display='none';}
+
+  (function restoreAnalysis(){
+    const saved = sessionStorage.getItem('lastAnalysis');
+    if(saved){
+      try { const {title,text}=JSON.parse(saved); showTabResult(title,text); sessionStorage.removeItem('lastAnalysis'); } catch(e){}
+    }
+  })();
+
+  document.querySelectorAll('.action-tab').forEach(btn=>{
+    btn.addEventListener('click',async function(){
+      const preset = this.dataset.preset;
+      const title = this.querySelector('.action-title').textContent;
+      showTabResult(title,'Bank Buddy is working on this...');
+      try {
+        const r = await fetch('/agent/preset/'+preset,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'}});
+        const data = await r.json();
+        showTabResult(title, data.response || 'Error: ' + (data.error||'unknown'));
+      } catch(e){ showTabResult(title,'Could not reach Bank Buddy.'); }
+    });
+  });
+
+  document.getElementById('save-goal-btn').onclick = async () => {
+    const name = document.getElementById('goal-name').value.trim();
+    const amount = document.getElementById('goal-amount').value.trim();
+    const date = document.getElementById('goal-date').value;
+    if(!name||!amount){alert('Please fill both fields.');return;}
+    const r = await fetch('/goals/add',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,target_amount:amount,target_date:date})});
+    const data = await r.json();
+    if(data.status==='ok') window.location.reload(); else alert('Save failed: '+(data.error||'unknown'));
+  };
+
+  document.getElementById('save-budget-btn').onclick = async () => {
+    const cat = document.getElementById('budget-category').value;
+    const amount = document.getElementById('budget-amount').value.trim();
+    if(!amount){alert('Enter an amount.');return;}
+    const r = await fetch('/budgets/add',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:cat,monthly_limit:amount})});
+    const data = await r.json();
+    if(data.status==='ok') window.location.reload(); else alert('Save failed: '+(data.error||'unknown'));
+  };
+
+  document.querySelectorAll('.goal-delete').forEach(btn=>{
+    btn.addEventListener('click',async function(){
+      if(!confirm('Delete this goal?'))return;
+      const id=this.dataset.id;
+      const r=await fetch('/goals/'+id+'/delete',{method:'POST',credentials:'same-origin'});
+      const d=await r.json();
+      if(d.status==='deleted') document.getElementById('goal-'+id).remove();
+    });
+  });
+  document.querySelectorAll('.budget-delete').forEach(btn=>{
+    btn.addEventListener('click',async function(){
+      if(!confirm('Delete this budget?'))return;
+      const id=this.dataset.id;
+      const r=await fetch('/budgets/'+id+'/delete',{method:'POST',credentials:'same-origin'});
+      const d=await r.json();
+      if(d.status==='deleted') document.getElementById('budget-'+id).remove();
+    });
+  });
+  document.querySelectorAll('.doc-delete-btn').forEach(btn=>{
+    btn.addEventListener('click',async function(){
+      if(!confirm('Delete this statement?'))return;
+      const id=this.dataset.id;
+      const r=await fetch('/documents/'+id+'/delete',{method:'POST',credentials:'same-origin'});
+      const d=await r.json();
+      if(d.status==='deleted'){
+        document.getElementById('doc-'+id).remove();
+        const stat=document.getElementById('stat-count');
+        stat.textContent=Math.max(0,parseInt(stat.textContent)-1);
+      }
+    });
+  });
+  document.querySelectorAll('.debit-dismiss').forEach(btn=>{
+    btn.addEventListener('click',async function(){
+      if(!confirm('Dismiss this reminder?'))return;
+      const id=this.dataset.id;
+      const r=await fetch('/debit-orders/'+id+'/dismiss',{method:'POST',credentials:'same-origin'});
+      const d=await r.json();
+      if(d.status==='deleted') this.closest('.debit-row').remove();
+    });
+  });
+
+  // ---- Upload + analyse ----
+  document.getElementById('upload-form').addEventListener('submit',async function(e){
+    e.preventDefault();
+    const fi=document.getElementById('statement-file');
+    if(!fi.files.length){alert('Choose a file first.');return;}
+    const fd=new FormData(); fd.append('document',fi.files[0]);
+
+    showTabResult('Uploading statement…','Sending "'+fi.files[0].name+'" to Bank Buddy. Please wait…');
+
+    let uploadedName='';
+    try {
+      const r = await fetch('/agent/upload',{method:'POST',credentials:'same-origin',body:fd});
+      const d = await r.json();
+      if(d.status==='ok'){ uploadedName=d.filename; }
+      else { showTabResult('Upload failed', d.error||'Unknown error'); return; }
+    } catch(err){ showTabResult('Upload failed','Could not reach server.'); return; }
+
+    showTabResult('Analysing "'+uploadedName+'"…','Bank Buddy is reading your statement and updating your dashboard…');
+
+    try {
+      const r2 = await fetch('/agent/analyse-latest',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'}});
+      const d2 = await r2.json();
+      if(d2.response){
+        const title = d2.readable ? 'Bank Buddy analysed "'+uploadedName+'"'
+                                  : 'Bank Buddy could not read "'+uploadedName+'"';
+        showTabResult(title, d2.response);
+        setTimeout(()=>{
+          sessionStorage.setItem('lastAnalysis', JSON.stringify({title,text:d2.response}));
+          window.location.reload();
+        }, 1800);
+      } else {
+        showTabResult('Analysis failed', d2.error || 'Unknown error');
+      }
+    } catch(err){ showTabResult('Analysis failed','Could not reach Bank Buddy.'); }
+  });
+</script>
+{% endblock %}

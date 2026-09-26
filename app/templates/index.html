@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="text-align: center; padding: 3rem 1rem;">
+    <h1 style="font-size: 3rem; margin-bottom: 1rem;">💰 Bank Buddy</h1>
+    <p style="font-size: 1.2rem; color: #555; max-width: 600px; margin: 0 auto 2rem;">
+        Your supportive AI financial assistant for women and girls in South Africa
+    </p>
+    
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+        <a href="/auth/register" style="padding: 0.75rem 2rem; background: #6C63FF; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">
+            Get Started Free
+        </a>
+        <a href="/auth/login" style="padding: 0.75rem 2rem; background: white; color: #6C63FF; text-decoration: none; border-radius: 8px; font-weight: 600; border: 2px solid #6C63FF;">
+            Login
+        </a>
+    </div>
+</div>
+{% endblock %}

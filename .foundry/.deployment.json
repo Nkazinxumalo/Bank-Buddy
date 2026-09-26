@@ -1,0 +1,12 @@
+{
+  "projectId": "fa9a58e9-aa98-4578-9dde-092bf739e988",
+  "hostedAgentDeployOptions": {
+    "deploymentMethod": "zip",
+    "zipPackageMode": "remote",
+    "zipRuntime": "python_3_14",
+    "zipEntryPoint": [
+      "python3",
+      "app/forms.py"
+    ]
+  }
+}

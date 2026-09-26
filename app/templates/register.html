@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container" style="max-width: 520px;">
+    <h2 style="text-align: center; color: #6b47a1; margin-bottom: 24px;">Join Bank Buddy</h2>
+
+    <form method="POST" action="">
+        {{ form.hidden_tag() }}
+
+        <div style="margin-bottom: 16px;">
+            {{ form.username.label(style="font-weight:600;color:#3d2955;display:block;margin-bottom:6px;") }}
+            {{ form.username(style="width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;") }}
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            {{ form.email.label(style="font-weight:600;color:#3d2955;display:block;margin-bottom:6px;") }}
+            {{ form.email(style="width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;") }}
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            {{ form.password.label(style="font-weight:600;color:#3d2955;display:block;margin-bottom:6px;") }}
+            {{ form.password(style="width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;") }}
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            {{ form.confirm_password.label(style="font-weight:600;color:#3d2955;display:block;margin-bottom:6px;") }}
+            {{ form.confirm_password(style="width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;") }}
+        </div>
+
+        <div style="background: #fdf2f8; padding: 16px; border-radius: 10px; margin-bottom: 16px; font-size: 0.9rem; color: #3d2955; line-height: 1.5;">
+            <label style="display:flex; gap:10px; align-items:flex-start;">
+                {{ form.accept_terms(style="margin-top:4px;") }}
+                <span>
+                    <strong>Terms &amp; Conditions.</strong>
+                    I agree to Bank Buddy's Terms and Conditions of use, including its role as
+                    an AI financial <em>assistant</em> (not a licensed financial advisor).
+                </span>
+            </label>
+        </div>
+
+        <div style="background: #e9f7f5; padding: 16px; border-radius: 10px; margin-bottom: 20px; font-size: 0.9rem; color: #2c5c58; line-height: 1.5;">
+            <label style="display:flex; gap:10px; align-items:flex-start;">
+                {{ form.data_consent(style="margin-top:4px;") }}
+                <span>
+                    <strong>Data consent (POPIA).</strong>
+                    I consent to Bank Buddy processing my financial data to provide personalised
+                    guidance. My data is stored securely, is never used to train the AI, and I can
+                    delete it at any time.
+                </span>
+            </label>
+        </div>
+
+        {{ form.submit(style="width:100%;background:#6b47a1;color:white;padding:14px;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-size:1rem;") }}
+    </form>
+
+    <p style="text-align:center; margin-top:20px; color:#666;">
+        Already have an account?
+        <a href="{{ url_for('auth.login') }}" style="color:#6b47a1; font-weight:700;">Log in</a>
+    </p>
+</div>
+{% endblock %}

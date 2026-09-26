@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width: 850px; margin: 0 auto;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <h2 style="color: #3F3D56; margin: 0;">💬 Chat with Bank Buddy</h2>
+    <button id="reset-btn" type="button"
+            style="background: #f3f3f6; color: #555; padding: 8px 16px; border: none;
+                   border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem;">
+      Start new conversation
+    </button>
+  </div>
+  <p style="color: #666; margin-bottom: 1rem;">Ask about budgeting, saving, or financial literacy.</p>
+
+  <div id="chat-history-container"
+       style="background:white; border-radius:12px; padding:1rem; height:450px; overflow-y:auto;
+              border:1px solid #ddd; margin-bottom:1rem;">
+    {% for chat in conversation_history %}
+      {% if chat.user and not chat.user.startswith('[') %}
+      <div style="text-align:right; margin-bottom:10px;">
+        <div style="display:inline-block; background:#6C63FF; color:white; padding:0.75rem 1rem;
+                    border-radius:8px; max-width:80%; text-align:left;">
+          {{ chat.user }}
+        </div>
+      </div>
+      {% endif %}
+      <div style="margin-bottom:10px;">
+        <div style="display:inline-block; background:#e8e8e8; padding:0.75rem 1rem;
+                    border-radius:8px; max-width:80%; white-space:pre-wrap;">
+          <strong style="color:#6C63FF;">Bank Buddy:</strong> {{ chat.assistant }}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div style="display:flex; gap:0.5rem;">
+    <input type="text" id="user_query" placeholder="Ask me anything..."
+           style="flex:1; padding:0.75rem; border:1px solid #ddd; border-radius:8px; font-size:1rem;">
+    <button id="send-btn" type="button"
+            style="padding:0.75rem 2rem; background:#6b47a1; color:white; border:none;
+                   border-radius:8px; cursor:pointer; font-weight:600;">
+      Send
+    </button>
+  </div>
+  <p style="color:#666; font-size:0.85rem; margin-top:10px; text-align:center;">
+    🌍 Bank Buddy responds in English, isiZulu, isiXhosa, Sesotho, and Afrikaans.
+  </p>
+</div>
+
+<script>
+  const chatBox = document.getElementById('chat-history-container');
+  const input = document.getElementById('user_query');
+  const btn = document.getElementById('send-btn');
+  const resetBtn = document.getElementById('reset-btn');
+
+  function addBubble(role, text) {
+    const wrap = document.createElement('div');
+    wrap.style.marginBottom = '10px';
+    if (role === 'user') wrap.style.textAlign = 'right';
+
+    const b = document.createElement('div');
+    b.style.display = 'inline-block';
+    b.style.padding = '0.75rem 1rem';
+    b.style.borderRadius = '8px';
+    b.style.maxWidth = '80%';
+    b.style.whiteSpace = 'pre-wrap';
+
+    if (role === 'user') {
+      b.style.background = '#6C63FF';
+      b.style.color = 'white';
+      b.style.textAlign = 'left';
+      b.innerHTML = escapeHtml(text);
+    } else {
+      b.style.background = '#e8e8e8';
+      b.innerHTML = '<strong style="color:#6C63FF;">Bank Buddy:</strong> ' + escapeHtml(text);
+    }
+
+    wrap.appendChild(b);
+    chatBox.appendChild(wrap);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    return b;
+  }
+
+  function escapeHtml(t) {
+    const d = document.createElement('div');
+    d.textContent = t;
+    return d.innerHTML;
+  }
+
+  // ---- Auto-greet on first load ----
+  const alreadyGreeted = {{ 'true' if conversation_history else 'false' }};
+
+  if (!alreadyGreeted) {
+    const loading = addBubble('assistant', 'Bank Buddy is saying hello...');
+    fetch('/agent/greet', { method: 'POST', credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        loading.innerHTML = '<strong style="color:#6C63FF;">Bank Buddy:</strong> ' +
+                            escapeHtml(data.response || 'Hello! How can I help you today?');
+        chatBox.scrollTop = chatBox.scrollHeight;
+      })
+      .catch(() => {
+        loading.innerHTML = '<strong style="color:#6C63FF;">Bank Buddy:</strong> ' +
+                            'Hello! I am Bank Buddy, your supportive AI financial assistant. ' +
+                            'What would you like help with today?';
+      });
+  }
+
+  // ---- Send user message ----
+  async function send() {
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    addBubble('user', msg);
+    input.value = '';
+
+    const loading = addBubble('assistant', 'Bank Buddy is typing...');
+
+    try {
+      const r = await fetch('/agent/send', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: msg})
+      });
+      const data = await r.json();
+      loading.innerHTML = '<strong style="color:#6C63FF;">Bank Buddy:</strong> ' +
+                          escapeHtml(data.response || data.error || 'No response.');
+    } catch (e) {
+      loading.innerHTML = '<strong style="color:#6C63FF;">Bank Buddy:</strong> ' +
+                          'Sorry, I could not reach the backend. Please try again.';
+    }
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  // ---- Start new conversation ----
+  resetBtn.addEventListener('click', async () => {
+    if (!confirm('Start a new conversation? The current chat history will be cleared.')) return;
+    try {
+      await fetch('/agent/reset', { method: 'POST', credentials: 'same-origin' });
+    } catch (e) {}
+    window.location.reload();
+  });
+
+  btn.addEventListener('click', send);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  chatBox.scrollTop = chatBox.scrollHeight;
+</script>
+{% endblock %}

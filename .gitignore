@@ -1,0 +1,9 @@
+.copilot-azure/
+.env
+instance/
+__pycache__/
+*.py[cod]
+venv/
+.venv/app/site.db
+app/uploads/
+deploy.zip

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="container" style="max-width: 500px;">
+        <form method="POST" action="">
+            {{ form.hidden_tag() }}
+            <fieldset style="border: none; padding: 0;">
+                <legend style="font-size: 1.5rem; font-weight: bold; color: #3F3D56; margin-bottom: 20px;">Log In</legend>
+
+                <div style="margin-bottom: 20px;">
+                    {{ form.email.label(class="form-label") }}
+                    {{ form.email(class="form-control") }}
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    {{ form.password.label(class="form-label") }}
+                    {{ form.password(class="form-control") }}
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    {{ form.remember() }} {{ form.remember.label() }}
+                </div>
+            </fieldset>
+            <div>
+                {{ form.submit(class="btn") }}
+            </div>
+        </form>
+        <div style="text-align: center; margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px;">
+            <small>Need An Account? <a href="{{ url_for('auth.register') }}" style="color: #F5B7B1; font-weight: bold; text-decoration: none;">Sign Up</a></small>
+        </div>
+    </div>
+{% endblock %}
