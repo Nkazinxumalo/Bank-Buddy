@@ -14,8 +14,7 @@ from app.models import (User, UserDocument, SavingsGoal, Budget,
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, current_user, logout_user, login_required
 
-from azure.identity import (DefaultAzureCredential, ManagedIdentityCredential,
-                            get_bearer_token_provider)
+from azure.identity import DefaultAzureCredential, ManagedIdentityCredential, get_bearer_token_provider
 from openai import OpenAI
 
 main_bp = Blueprint('main', __name__)
@@ -48,7 +47,6 @@ def allowed_file(filename):
 
 
 def extract_file_text(filepath, max_chars=8000):
-    """Return a plain-text representation of the uploaded file."""
     try:
         if not os.path.exists(filepath):
             return ""
@@ -89,24 +87,20 @@ def extract_file_text(filepath, max_chars=8000):
 
 
 # ============================================
-# CREDENTIALS — works on Azure, Render, and local
+# CREDENTIALS
 # ============================================
 def get_azure_credential():
     """
-    Choose the right credential for the current environment:
-    - Azure App Service  → system-assigned Managed Identity
-    - Render (or other)  → user-assigned Managed Identity via AZURE_CLIENT_ID
-    - Local              → DefaultAzureCredential (uses `az login`)
+    - Azure App Service  → ManagedIdentityCredential (system-assigned)
+    - Render / other     → DefaultAzureCredential (reads AZURE_CLIENT_ID,
+                            AZURE_TENANT_ID, AZURE_CLIENT_SECRET env vars)
+    - Local              → DefaultAzureCredential (reads `az login`)
     """
     if os.environ.get('WEBSITE_SITE_NAME'):
-        print("Auth: Azure App Service — ManagedIdentityCredential (system-assigned)")
+        print("Auth: Azure App Service — ManagedIdentityCredential")
         return ManagedIdentityCredential()
 
-    if os.environ.get('AZURE_CLIENT_ID'):
-        print(f"Auth: Render/user-assigned — ManagedIdentityCredential(client_id={os.environ['AZURE_CLIENT_ID'][:8]}...)")
-        return ManagedIdentityCredential(client_id=os.environ.get('AZURE_CLIENT_ID'))
-
-    print("Auth: Local — DefaultAzureCredential (az login)")
+    print("Auth: DefaultAzureCredential (Render env vars or local az login)")
     return DefaultAzureCredential()
 
 
@@ -124,7 +118,6 @@ def get_azure_client():
 
 
 def call_bank_buddy(message, conversation_id=None):
-    """Send a message to Bank Buddy, returns (response_text, conversation_id)."""
     client = get_azure_client()
     if not conversation_id:
         conversation = client.conversations.create()
@@ -134,7 +127,7 @@ def call_bank_buddy(message, conversation_id=None):
 
 
 # ============================================
-# CONTEXT BLOCK — gives the agent awareness of the dashboard
+# CONTEXT — dashboard awareness
 # ============================================
 def build_user_context():
     uid = current_user.id
@@ -463,7 +456,6 @@ def agent_analyse_latest():
                              "Please paste a few key lines so I can still help you analyse it.")
             })
 
-        # Step 1: Extract structured data
         extract_prompt = (
             "You are extracting structured data from a South African bank statement.\n"
             "Return ONLY valid JSON — no other text — in this exact shape:\n"
@@ -491,7 +483,6 @@ def agent_analyse_latest():
         top_categories = extracted.get('top_categories') or []
         debit_orders = extracted.get('debit_orders') or []
 
-        # Step 2: Save summary
         summary = StatementSummary.query.filter_by(user_id=current_user.id).first()
         if not summary:
             summary = StatementSummary(user_id=current_user.id)
@@ -502,7 +493,6 @@ def agent_analyse_latest():
         summary.top_categories_json = json.dumps(top_categories)
         summary.updated_at = datetime.utcnow()
 
-        # Step 3: Upsert debit orders
         today = date.today()
         for d in debit_orders:
             name = (d.get('name') or '').strip()
@@ -535,7 +525,6 @@ def agent_analyse_latest():
 
         db.session.commit()
 
-        # Step 4: Narrative response
         narrative_prompt = (
             "The user just uploaded a bank statement and I've extracted this summary:\n"
             f"- Total spent: R{total_spent:.2f}\n"
@@ -681,14 +670,16 @@ def chat_test():
 @main_bp.route("/auth-debug")
 def auth_debug():
     """Diagnostic endpoint — reports which credential path is being used."""
+    env = {
+        "WEBSITE_SITE_NAME": os.environ.get('WEBSITE_SITE_NAME'),
+        "AZURE_CLIENT_ID": bool(os.environ.get('AZURE_CLIENT_ID')),
+        "AZURE_TENANT_ID": bool(os.environ.get('AZURE_TENANT_ID')),
+        "AZURE_CLIENT_SECRET": bool(os.environ.get('AZURE_CLIENT_SECRET')),
+        "AZURE_PROJECT_ENDPOINT_set": bool(os.environ.get('AZURE_PROJECT_ENDPOINT')),
+        "AZURE_AGENT_NAME": AZURE_AGENT_NAME,
+    }
     return {
-        "environment": {
-            "WEBSITE_SITE_NAME": os.environ.get('WEBSITE_SITE_NAME'),
-            "AZURE_CLIENT_ID": bool(os.environ.get('AZURE_CLIENT_ID')),
-            "AZURE_TENANT_ID": bool(os.environ.get('AZURE_TENANT_ID')),
-            "AZURE_PROJECT_ENDPOINT_set": bool(os.environ.get('AZURE_PROJECT_ENDPOINT')),
-            "AZURE_AGENT_NAME": AZURE_AGENT_NAME,
-        },
+        "environment": env,
         "credential_chosen": type(get_azure_credential()).__name__,
     }
 
